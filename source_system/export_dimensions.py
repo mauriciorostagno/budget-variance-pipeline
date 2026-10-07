@@ -1,5 +1,5 @@
 import random
-from db import get_connection
+import csv
 
 from faker import Faker
 
@@ -16,27 +16,23 @@ COST_CENTERS = [
     (7, "Executive Office", "Corporate Governance", "Mike Carls"),
 ]
 
-conn = get_connection()
-cur = conn.cursor()
 
-cur.execute("truncate raw.vendors, raw.cost_centers;")
+with open("landing/vendors.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(["vendor_id", "name", "vendor_type", "country"])
+    
+    for i in range(20):
+        vendor_id = i + 1
+        name = fake.company()
+        vendor_type = random.choice(VENDOR_TYPES)
+        country = fake.country()
+        writer.writerow([vendor_id, name, vendor_type, country])
 
-for i in range(20):
-    vendor_id = i + 1
-    name = fake.company()
-    vendor_type = random.choice(VENDOR_TYPES)
-    country = fake.country()
-    cur.execute(
-        "insert into raw.vendors (vendor_id, name, vendor_type, country) values (%s, %s, %s, %s)",
-        (vendor_id, name, vendor_type, country),
-    )
+with open("landing/cost_centers.csv", "w", newline="", encoding="utf-8") as e:
+    writer = csv.writer(e)
+    writer.writerow(["cost_center_id", "name", "area", "owner"])
 
-for cost_center_id, name, area, owner in COST_CENTERS:
-    cur.execute(
-        "insert into raw.cost_centers (cost_center_id, name, area, owner) values (%s, %s, %s, %s)",
-        (cost_center_id, name, area, owner),
-    )
+    for cost_center_id, name, area, owner in COST_CENTERS:
+        writer.writerow([cost_center_id, name, area, owner])
 
-conn.commit()
-conn.close()
-print("20 vendors and 7 cost centers inserted")
+print("vendors.csv and cost_centers.csv exported to landing/")
