@@ -16,7 +16,6 @@ COST_CENTERS = [
     (7, "Executive Office", "Corporate Governance", "Mike Carls"),
 ]
 
-
 with open("landing/vendors.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["vendor_id", "name", "vendor_type", "country"])
