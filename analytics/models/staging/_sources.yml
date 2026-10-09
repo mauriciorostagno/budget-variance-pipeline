@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: vendors
+        description: vendors information
+      - name: cost_centers
+        description: cost centers information
+      - name: budget
+        description: information for each budget
+      - name: invoices
+        description: One row per invoice as exported by the ERP. Contains duplicates, missing categories and orphan cost center ids on purpose.
+      - name: fx_rates
+        description: rates for each currency
