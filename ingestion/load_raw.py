@@ -1,11 +1,11 @@
 import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from db import get_connection
 
 
-def load_csv_to_raw(file_path, target_table, columns):
+def load_csv_to_raw(file_path, target_table, columns, partition_column=None, partition_value=None):
     batch_id = str(uuid.uuid4())
     started_at = datetime.now()
     source_file = os.path.basename(file_path)
@@ -13,7 +13,12 @@ def load_csv_to_raw(file_path, target_table, columns):
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(f"truncate {target_table};")
+    if partition_column is None:
+        cur.execute(f"truncate {target_table};")
+    else:
+        cur.execute(f"delete from {target_table} where {partition_column} = %s;",
+                    (partition_value,),
+        )
 
     with open(file_path, "r", encoding="utf-8") as f:
         cur.copy_expert(
@@ -48,4 +53,11 @@ if __name__ == "__main__":
         "landing/cost_centers.csv",
         "raw.cost_centers",
         "cost_center_id, name, area, owner",
+    )
+    load_csv_to_raw(
+        "landing/invoices_2026-03-14.csv",
+        "raw.invoices",
+        "invoice_id, vendor_id, cost_center_id, issue_date, due_date, status, expense_category, description, amount, currency, updated_at",
+        partition_column="issue_date",
+        partition_value=date(2026,3,14),
     )
