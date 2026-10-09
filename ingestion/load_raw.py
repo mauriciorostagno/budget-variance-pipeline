@@ -1,3 +1,4 @@
+import glob
 import os
 import uuid
 from datetime import date, datetime
@@ -43,7 +44,13 @@ def load_csv_to_raw(file_path, target_table, columns, partition_column=None, par
     print(f"{row_count} rows loaded into {target_table}")
 
 
-if __name__ == "__main__":
+INVOICE_COLUMNS = (
+    "invoice_id, vendor_id, cost_center_id, issue_date, due_date, status, "
+    "expense_category, description, amount, currency, updated_at"
+)
+
+
+def load_dimensions():
     load_csv_to_raw(
         "landing/vendors.csv",
         "raw.vendors",
@@ -55,9 +62,31 @@ if __name__ == "__main__":
         "cost_center_id, name, area, owner",
     )
     load_csv_to_raw(
-        "landing/invoices_2026-03-14.csv",
-        "raw.invoices",
-        "invoice_id, vendor_id, cost_center_id, issue_date, due_date, status, expense_category, description, amount, currency, updated_at",
-        partition_column="issue_date",
-        partition_value=date(2026,3,14),
+        "landing/budget.csv",
+        "raw.budget",
+        "budget_id, cost_center_id, expense_category, period_month, amount, currency",
     )
+
+
+def load_all_invoice_files():
+    """Load every daily invoice file sitting in landing, oldest first.
+
+    The business date comes from the file name, so each file replaces its own
+    partition and the whole folder can be reloaded without duplicating rows.
+    """
+    files = sorted(glob.glob("landing/invoices_*.csv"))
+    for file_path in files:
+        file_date = os.path.basename(file_path)[len("invoices_"):-len(".csv")]
+        load_csv_to_raw(
+            file_path,
+            "raw.invoices",
+            INVOICE_COLUMNS,
+            partition_column="issue_date",
+            partition_value=date.fromisoformat(file_date),
+        )
+    print(f"{len(files)} invoice files loaded")
+
+
+if __name__ == "__main__":
+    load_dimensions()
+    load_all_invoice_files()
