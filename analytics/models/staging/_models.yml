@@ -1,0 +1,155 @@
+version: 2
+
+models:
+  - name: stg_invoices
+    description: >
+      One row per invoice, deduplicated by invoice_id keeping the most recent
+      version from the source system. Column names and types are normalized;
+      no business logic is applied here.
+    columns:
+      - name: invoice_id
+        description: identifier for each invoice.
+        data_tests:
+          - unique
+          - not_null
+      - name: vendor_id
+        description: identifier for each vendor.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_vendors')
+                field: vendor_id
+              config:
+                severity: warn
+      - name: cost_center_id
+        description: identifier for each cost center.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_cost_centers')
+                field: cost_center_id
+              config:
+                severity: warn
+      - name: issue_date
+        description: date when the invoice was made.
+        data_tests:
+          - not_null
+      - name: due_date
+        description: Payment due date, normally 30 days after issue_date.
+      - name: status
+        description: statuses for the invoices.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['pending', 'approved', 'paid', 'rejected']
+      - name: expense_category_raw
+        description: >
+          Category as reported by the source system. Null for roughly 15% of
+          invoices, which is expected: the classification agent fills these in
+          downstream. No not_null test here on purpose.
+      - name: description
+        description: description for the invoice.
+      - name: amount
+        description: amount for the transaction.
+        data_tests:
+          - not_null
+      - name: currency
+        description: currency of the transaction.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['USD', 'ARS', 'EUR']
+      - name: updated_at
+        description: date when the registry was modified for the last time.
+        data_tests:
+          - not_null
+
+  - name: stg_vendors
+    description: >
+      One row per vendor. Column names and types are normalized;
+      no business logic is applied here.
+    columns:
+      - name: vendor_id
+        description: identifier for each vendor.
+        data_tests:
+          - unique
+          - not_null
+      - name: vendor_name
+        description: name of the vendor.
+        data_tests:
+          - not_null
+      - name: vendor_type
+        description: type of vendor
+        data_tests:
+          - not_null
+      - name: country
+        description: country of the vendor.
+        data_tests:
+          - not_null
+
+  - name: stg_cost_centers
+    description: >
+      One row per cost center. Column names and types are normalized;
+      no business logic is applied here.
+    columns:
+      - name: cost_center_id
+        description: identifier for each cost center.
+        data_tests:
+          - unique
+          - not_null
+      - name: cost_center_name
+        description: name of the cost center.
+        data_tests:
+          - not_null
+      - name: owner
+        description: person in charge of the cost center
+        data_tests:
+          - not_null
+      - name: area
+        description: area that manages the cost center.
+        data_tests:
+          - not_null
+
+  - name: stg_budget
+    description: >
+      One row per budget. Column names and types are normalized; it specifies the cost center that owns the budget and the category of the expense.
+      No business logic is applied here.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - cost_center_id
+              - expense_category
+              - budget_month
+    columns:
+      - name: budget_id
+        description: identifier for each budget.
+        data_tests:
+          - unique
+          - not_null      
+      - name: cost_center_id
+        description: it identifies the cost center of the budget.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_cost_centers')
+                field: cost_center_id
+              config:
+                severity: warn
+      - name: expense_category
+        description: category of the expense.
+      - name: budget_month
+        description: month (date) of the budget.
+      - name: amount
+        description: amount of the budget.
+        data_tests:
+          - not_null
+      - name: currency 
+        description: currency of the transaction.
+        data_tests:
+          - not_null
