@@ -66,6 +66,11 @@ def load_dimensions():
         "raw.budget",
         "budget_id, cost_center_id, expense_category, period_month, amount, currency",
     )
+    load_csv_to_raw(
+        "landing/fx_rates_2025-10-01_2026-09-30.csv",
+        "raw.fx_rates",
+        "rate_date, currency, units_per_usd, loaded_at",
+    )
 
 
 def load_all_invoice_files():
