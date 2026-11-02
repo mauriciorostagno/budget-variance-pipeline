@@ -1,0 +1,81 @@
+name: ci
+
+# Builds the whole warehouse from nothing on every push: a throwaway Postgres,
+# the migrations, the simulated source data, the loader, and dbt build. If this
+# is green, the repository works from a clean clone and not just on a laptop.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and test the warehouse
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: data_admin
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: finance_datawarehouse
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: "5433"
+      PGDATABASE: finance_datawarehouse
+      PGUSER: data_admin
+      PGPASSWORD: admin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Apply the migrations
+        run: |
+          for file in sql/*.sql; do
+            echo "running $file"
+            psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+                 -v ON_ERROR_STOP=1 -f "$file"
+          done
+
+      - name: Generate the simulated source data
+        # Seeded, so the dataset is the same one the README reports on.
+        run: |
+          mkdir -p landing ground_truth
+          python source_system/export_dimensions.py
+          python source_system/export_budget.py
+          python source_system/export_invoices.py
+          python ingestion/fetch_fx_rates.py
+
+      - name: Load the raw layer
+        run: python ingestion/load_raw.py
+
+      - name: Build and test the dbt models
+        # The classification agent is deliberately not run here. It needs an API
+        # key and a language model is not something to assert equality on. The
+        # invoices it would have filled stay uncategorized and every test still
+        # passes, which is the point: the pipeline does not depend on the agent.
+        working-directory: analytics
+        env:
+          DBT_PROFILES_DIR: ${{ github.workspace }}/analytics
+        run: |
+          dbt deps
+          dbt build
