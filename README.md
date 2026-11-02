@@ -24,6 +24,10 @@ ERP export to the variance report. Source in `docs/pipeline.html`.
 - 62 dbt tests, including one asserting the variance mart reconciles with the
   invoice fact table to the cent
 
+These figures come from the run the project was built on. The generators are
+seeded, so a clone produces a consistent dataset of its own on every run, close
+to this one but not identical to it.
+
 The errors concentrate in one pair of categories, shipping read as office supplies.
 Part of that is label ambiguity rather than model failure. The model's self-reported
 confidence does not correlate with being right: it was wrong at an average confidence
