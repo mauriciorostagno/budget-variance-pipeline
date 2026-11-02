@@ -1,24 +1,25 @@
+select
+    invoices.invoice_id,
+    invoices.vendor_id as vendor_key,
+    invoices.cost_center_key,
+    invoices.issue_date,
+    invoices.due_date,
+    date_trunc('month', invoices.issue_date)::date as budget_month,
+    invoices.status,
+    invoices.expense_category_raw,
+    invoices.expense_category,
+    invoices.category_source,
+    invoices.prediction_confidence,
+    invoices.transaction_type,
+    invoices.description,
+    invoices.amount,
+    invoices.currency,
+    invoices.amount * fx.rate_to_usd as amount_usd,
+    fx.rate_to_usd,
+    fx.is_rate_filled
 
+from {{ ref('int_invoices_classified') }} invoices
 
-select 
-    a.invoice_id,
-    a.vendor_id as vendor_key,
-    a.cost_center_key,
-    a.issue_date,
-    a.due_date,
-    date_trunc('month', a.issue_date)::date as budget_month,
-    a.status,
-    a.expense_category_raw,
-    a.transaction_type,
-    a.description,
-    a.amount,
-    a.currency,
-    a.amount*b.rate_to_usd as amount_usd,
-    b.rate_to_usd,
-    b.is_rate_filled
-
-from {{ ref('int_invoices_classified') }} a
-
-left join {{ ref('int_fx_rates_daily') }} b
-    on a.issue_date = b.rate_date
-    and a.currency = b.currency
+left join {{ ref('int_fx_rates_daily') }} fx
+    on invoices.issue_date = fx.rate_date
+    and invoices.currency = fx.currency

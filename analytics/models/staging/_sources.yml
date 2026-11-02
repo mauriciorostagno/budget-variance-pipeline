@@ -14,3 +14,8 @@ sources:
         description: One row per invoice as exported by the ERP. Contains duplicates, missing categories and orphan cost center ids on purpose.
       - name: fx_rates
         description: rates for each currency
+  - name: ml
+    schema: ml
+    tables:
+      - name: invoice_category_predictions
+        description: One row per prediction made by the classification agent. Keeps full history, so the most recent prediction per invoice is picked in staging.

@@ -80,8 +80,26 @@ models:
         description: Invoice status in the source system.
       - name: expense_category_raw
         description: >
-          Category as reported by the source. Null for roughly 15% of invoices;
-          the classification agent fills these in downstream.
+          Category exactly as reported by the source. Null for roughly 15% of
+          invoices. Never overwritten, so the source answer stays auditable.
+      - name: expense_category
+        description: >
+          Category used for reporting. The reported one when it exists, the
+          agent prediction otherwise. Still null when neither is available.
+      - name: category_source
+        description: >
+          Where expense_category came from: reported, predicted or unknown.
+          Reported always wins over predicted.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['reported', 'predicted', 'unknown']
+      - name: prediction_confidence
+        description: >
+          Confidence the model reported for its own prediction. Null when the
+          category was not predicted. Measured as not calibrated, so it is
+          kept for analysis and not used as a gate.
       - name: transaction_type
         description: invoice or credit_note, derived from the sign of the amount.
       - name: description
@@ -104,3 +122,54 @@ models:
         description: Rate applied, kept so the conversion can be audited.
       - name: is_rate_filled
         description: True when the rate was carried forward from an earlier day.
+
+  - name: fct_budget_variance
+    description: >
+      Budget versus actual spend, one row per cost center, expense category and
+      month. Built with a full outer join so that budget with no spend and spend
+      with no budget both survive. Total actual spend reconciles with fct_invoices.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - cost_center_key
+              - expense_category
+              - budget_month
+    columns:
+      - name: cost_center_key
+        description: Foreign key to dim_cost_centers. -1 when unmapped.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_cost_centers')
+                field: cost_center_key
+              config:
+                severity: error
+      - name: expense_category
+        description: >
+          Expense category, reported or predicted. Null only when neither the
+          source nor the agent produced one, which is its own bucket in the report.
+      - name: budget_month
+        description: First day of the month the budget and the spend belong to.
+        data_tests:
+          - not_null
+      - name: budget_amount_usd
+        description: Planned spend for the month, in USD. Zero when no budget was set.
+        data_tests:
+          - not_null
+      - name: actual_amount_usd
+        description: Net actual spend for the month, in USD, credit notes included.
+        data_tests:
+          - not_null
+      - name: actual_amount_predicted_usd
+        description: >
+          Share of actual_amount_usd whose category came from the agent instead
+          of the source. Lets a reader judge how much of a variance rests on a
+          model prediction.
+        data_tests:
+          - not_null
+      - name: variance_amount_usd
+        description: Actual minus budget. Positive means overspend.
+      - name: variance_pct
+        description: Variance as a share of budget. Null when the budget is zero.
