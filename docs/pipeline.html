@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; font: 14px system-ui, sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<title>Budget Variance Pipeline</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  /* Layout: a stage rail across the top, a two-column stage detail below it,
+     and a full-width decision note closing each stage. */
+  :root {
+    --bg: #eceef2;
+    --surface: #ffffff;
+    --surface-2: #f4f6f9;
+    --ink: #121820;
+    --muted: #5c6878;
+    --line: #d2d8e1;
+    --line-strong: #b4bdc9;
+    --source: #1c5f78;   /* came from the source system */
+    --model: #a85f17;    /* came from the language model */
+
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1319;
+      --surface: #161d26;
+      --surface-2: #1c242e;
+      --ink: #e4e9ef;
+      --muted: #94a2b2;
+      --line: #27313d;
+      --line-strong: #3a4654;
+      --source: #68b6d6;
+      --model: #e0a059;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0e1319;
+    --surface: #161d26;
+    --surface-2: #1c242e;
+    --ink: #e4e9ef;
+    --muted: #94a2b2;
+    --line: #27313d;
+    --line-strong: #3a4654;
+    --source: #68b6d6;
+    --model: #e0a059;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 48px;
+  }
+
+  /* ---- masthead ---- */
+
+  .masthead { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+
+  .topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  .eyebrow {
+    font-family: var(--display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .lang {
+    display: inline-flex;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    overflow: hidden;
+    flex: 0 0 auto;
+  }
+  .lang button {
+    appearance: none;
+    cursor: pointer;
+    font-family: var(--display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .09em;
+    background: var(--surface);
+    color: var(--muted);
+    border: 0;
+    padding: 5px 11px;
+  }
+  .lang button + button { border-left: 1px solid var(--line-strong); }
+  .lang button:hover { color: var(--ink); }
+  .lang button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .lang button:focus-visible { outline: 2px solid var(--source); outline-offset: -2px; }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(26px, 5vw, 40px);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst { margin: 0; max-width: 62ch; color: var(--muted); }
+
+  .headline-figures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin-top: 6px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  .figure { display: flex; flex-direction: column; gap: 1px; }
+  .figure b {
+    font-family: var(--mono);
+    font-size: 19px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .figure span {
+    font-family: var(--display);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ---- stage rail ---- */
+
+  .rail-scroll { overflow-x: auto; margin: 0 -4px 26px; padding: 4px; }
+
+  .rail { display: flex; align-items: stretch; gap: 0; min-width: 780px; }
+
+  .stage-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    appearance: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--display);
+    background: var(--surface);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-right-width: 0;
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    transition: background .15s ease, color .15s ease;
+  }
+  .stage-btn:first-child { border-radius: 3px 0 0 3px; }
+  .stage-btn:last-child { border-right-width: 1px; border-radius: 0 3px 3px 0; }
+  .stage-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .stage-btn:focus-visible { outline: 2px solid var(--source); outline-offset: -2px; z-index: 2; }
+
+  .stage-btn .n {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .stage-btn .t { font-size: 13px; font-weight: 600; line-height: 1.25; }
+
+  .stage-btn[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .stage-btn[aria-selected="true"] .n { color: var(--bg); opacity: .65; }
+
+  .stage-btn .bar { height: 3px; width: 100%; background: var(--line-strong); margin-top: 2px; }
+  .stage-btn[data-tone="source"] .bar { background: var(--source); }
+  .stage-btn[data-tone="model"] .bar { background: var(--model); }
+
+  /* ---- detail ---- */
+
+  .detail { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; }
+
+  @media (max-width: 760px) {
+    .detail { grid-template-columns: 1fr; }
+    .rail { min-width: 700px; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 20px;
+    min-width: 0;
+  }
+
+  .layer-tag {
+    display: inline-block;
+    font-family: var(--display);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    padding: 2px 7px;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-size: 23px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    margin: 12px 0 4px;
+    text-wrap: balance;
+  }
+
+  .where {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 14px;
+    word-break: break-word;
+  }
+
+  .summary { margin: 0; }
+
+  .facts { list-style: none; margin: 18px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); display: grid; gap: 7px; }
+  .facts li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 14px; }
+  .facts .k { color: var(--muted); font-family: var(--display); font-size: 12.5px; font-weight: 500; }
+  .facts .v { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---- record card ---- */
+
+  .record-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .record-title { font-family: var(--display); font-size: 12px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+  .rowcount { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+  .record-note { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+
+  .fields { display: grid; gap: 0; font-family: var(--mono); font-size: 12.5px; }
+
+  .field {
+    display: grid;
+    grid-template-columns: minmax(0, 11ch) minmax(0, 1fr);
+    gap: 10px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--line);
+    align-items: baseline;
+  }
+  .field:last-child { border-bottom: 0; }
+  .field .f { color: var(--muted); overflow-wrap: anywhere; }
+  .field .v { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+  .field[data-state="new"] { background: var(--surface-2); }
+  .field[data-state="new"] .f::after { content: " +"; color: var(--source); }
+  .field[data-state="model"] { background: var(--surface-2); }
+  .field[data-state="model"] .v { color: var(--model); }
+  .field[data-state="null"] .v { color: var(--muted); font-style: italic; }
+
+  /* ---- decision ---- */
+
+  .decision {
+    margin-top: 22px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--source);
+    border-radius: 3px;
+    padding: 18px 20px;
+  }
+  .decision[data-tone="model"] { border-left-color: var(--model); }
+  .decision h3 {
+    font-family: var(--display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .decision p { margin: 0; max-width: 78ch; }
+  .decision .decision-title {
+    font-family: var(--display);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    margin-bottom: 5px;
+  }
+
+  /* ---- controls ---- */
+
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+
+  .btn {
+    appearance: none;
+    cursor: pointer;
+    font-family: var(--display);
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 15px;
+  }
+  .btn:hover:not(:disabled) { background: var(--surface-2); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn:focus-visible { outline: 2px solid var(--source); outline-offset: 2px; }
+
+  .progress { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+  /* ---- following strip ---- */
+
+  .following {
+    margin-top: 30px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .following .swatch { width: 3px; align-self: stretch; background: var(--model); flex: 0 0 3px; }
+  .following p { margin: 0; max-width: 72ch; }
+  .following code { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap" id="wrap">
+
+  <header class="masthead">
+    <div class="topline">
+      <div class="eyebrow" id="eyebrow"></div>
+      <div class="lang" role="group" aria-label="Language / Idioma">
+        <button type="button" id="lang-en">EN</button>
+        <button type="button" id="lang-es">ES</button>
+      </div>
+    </div>
+    <h1>Budget Variance Pipeline</h1>
+    <p class="standfirst" id="standfirst"></p>
+    <div class="headline-figures" id="figures"></div>
+  </header>
+
+  <div class="rail-scroll">
+    <div class="rail" role="tablist" aria-label="Pipeline stages" id="rail"></div>
+  </div>
+
+  <main class="detail">
+    <section class="panel" id="narrative" role="tabpanel" tabindex="0" aria-live="polite"></section>
+    <aside class="panel" id="record"></aside>
+  </main>
+
+  <section class="decision" id="decision"></section>
+
+  <div class="controls">
+    <button class="btn" id="prev" type="button"></button>
+    <button class="btn" id="next" type="button"></button>
+    <span class="progress" id="progress"></span>
+  </div>
+
+  <div class="following">
+    <div class="swatch" aria-hidden="true"></div>
+    <p id="following"></p>
+  </div>
+
+</div>
+
+<script>
+  var UI = {
+    eyebrow: {
+      en: "dbt · Airflow · PostgreSQL · LLM classification",
+      es: "dbt · Airflow · PostgreSQL · clasificación con LLM"
+    },
+    standfirst: {
+      en: "Seven stages take an invoice from a simulated ERP export to a monthly budget variance report. Step through them to see what each one changes.",
+      es: "Siete etapas llevan una factura desde la exportación de un ERP simulado hasta un reporte mensual de desvío presupuestario. Recorrelas para ver qué cambia en cada una."
+    },
+    figures: [
+      ["6,550", { en: "Invoices", es: "Facturas" }],
+      ["$61.0M", { en: "Net spend", es: "Gasto neto" }],
+      ["15.4% → 0%", { en: "Uncategorized", es: "Sin categoría" }],
+      ["95.01%", { en: "Model accuracy", es: "Precisión del modelo" }],
+      ["62", { en: "dbt tests", es: "Tests de dbt" }]
+    ],
+    prev: { en: "← Previous", es: "← Anterior" },
+    next: { en: "Next →", es: "Siguiente →" },
+    stageOf: { en: "Stage %1 of %2", es: "Etapa %1 de %2" },
+    recordTitle: { en: "Example record", es: "Registro de ejemplo" },
+    decisionLabel: { en: "Design decision", es: "Decisión de diseño" },
+    following: {
+      en: "Every stage follows the same invoice, <code>INV-2026-03-12-007</code>. It is deliberately one the model got wrong: the description names office supplies but the expense is the delivery of them. Watch the <code>category_source</code> field, which is what lets a reader catch that.",
+      es: "Todas las etapas siguen la misma factura, <code>INV-2026-03-12-007</code>. Es a propósito una que el modelo clasificó mal. La descripción nombra insumos de oficina, pero el gasto es la entrega de esos insumos. Mirá el campo <code>category_source</code>, que es lo que permite darse cuenta."
+    }
+  };
+
+  var STAGES = [
+    {
+      n: "01",
+      tone: "source",
+      tab: { en: "Source system", es: "Sistema fuente" },
+      layer: { en: "Simulated ERP", es: "ERP simulado" },
+      title: { en: "The export nobody cleans", es: "La exportación que nadie limpia" },
+      where: "source_system/export_invoices.py → landing/invoices_2026-03-12.csv",
+      summary: {
+        en: "A generator writes one CSV per business day into landing/, the way a real ERP drops files on a share. Twenty-five invoices a day across 261 business days. It injects defects on purpose, because exports from real finance systems are never clean, and a pipeline that has only ever seen tidy input has never been tested.",
+        es: "Un generador escribe un CSV por día hábil en landing/, como un ERP real que deja archivos en una carpeta compartida. Veinticinco facturas por día, a lo largo de 261 días hábiles. Los defectos los inyecta a propósito. Las exportaciones de sistemas financieros reales nunca vienen limpias, y un pipeline que solo vio datos prolijos nunca fue puesto a prueba."
+      },
+      facts: [
+        [{ en: "Files written", es: "Archivos escritos" }, "262"],
+        [{ en: "Rows written", es: "Filas escritas" }, "6,753"],
+        [{ en: "No category", es: "Sin categoría" }, "15%"],
+        [{ en: "Duplicated rows", es: "Filas duplicadas" }, "3%"],
+        [{ en: "Credit notes", es: "Notas de crédito" }, "2%"],
+        [{ en: "Due before issue", es: "Vencimiento antes de emisión" }, "2%"]
+      ],
+      rows: { en: "6,753 rows written", es: "6,753 filas escritas" },
+      note: {
+        en: "One line of the daily CSV. The category field is empty: whoever filed the invoice never picked one.",
+        es: "Una línea del CSV diario. El campo de categoría está vacío. Quien cargó la factura nunca eligió una."
+      },
+      fields: [
+        ["invoice_id", "INV-2026-03-12-007", ""],
+        ["vendor_id", "14", ""],
+        ["cost_center_id", "3", ""],
+        ["issue_date", "2026-03-12", ""],
+        ["due_date", "2026-04-11", ""],
+        ["status", "approved", ""],
+        ["expense_category", { en: "(empty)", es: "(vacío)" }, "null"],
+        ["description", "local delivery, office supplies", ""],
+        ["amount", "1842.55", ""],
+        ["currency", "EUR", ""]
+      ],
+      decisionTitle: { en: "Why break the data on purpose", es: "Por qué romper los datos a propósito" },
+      decisionBody: {
+        en: "Duplicated ids, blank categories, negative amounts, cost centers that do not exist and due dates before the issue date are all written deliberately. They are what the pipeline has to survive and what the tests have to catch. Without them, every model downstream would be written against data that cannot happen.",
+        es: "Los ids duplicados, las categorías en blanco, los montos negativos, los centros de costo que no existen y los vencimientos anteriores a la emisión están escritos a propósito. Son lo que el pipeline tiene que sobrevivir y lo que los tests tienen que detectar. Sin eso, cada modelo río abajo estaría escrito contra datos que no pueden pasar."
+      }
+    },
+    {
+      n: "02",
+      tone: "source",
+      tab: { en: "Raw ingestion", es: "Ingesta a raw" },
+      layer: { en: "Python loader", es: "Loader de Python" },
+      title: { en: "Landed, untouched", es: "Aterrizó sin tocarse" },
+      where: "ingestion/load_raw.py → raw.invoices",
+      summary: {
+        en: "Each daily file is copied into Postgres with COPY. The loader replaces its own partition by issue date, so the whole folder can be reloaded without duplicating a row, and writes a batch record to ops.ingestion_log with the file name, the row count and the timing.",
+        es: "Cada archivo diario se copia a Postgres con COPY. El loader reemplaza su propia partición por fecha de emisión, así toda la carpeta se puede recargar sin duplicar una fila, y escribe un registro de lote en ops.ingestion_log con el nombre del archivo, la cantidad de filas y los tiempos."
+      },
+      facts: [
+        [{ en: "Rows loaded", es: "Filas cargadas" }, "6,753"],
+        [{ en: "Duplicate invoice ids", es: "Ids de factura duplicados" }, "203"],
+        [{ en: "Rows with no category", es: "Filas sin categoría" }, "1,037"],
+        [{ en: "Negative amounts", es: "Montos negativos" }, "142"],
+        [{ en: "Orphan cost centers", es: "Centros de costo huérfanos" }, "61"],
+        [{ en: "Inverted due dates", es: "Vencimientos invertidos" }, "123"]
+      ],
+      rows: { en: "6,753 rows in raw.invoices", es: "6,753 filas en raw.invoices" },
+      note: {
+        en: "The empty CSV field has become a real NULL. In COPY, an unquoted empty field is null, not an empty string.",
+        es: "El campo vacío del CSV ahora es un NULL real. En COPY, un campo vacío sin comillas es null, no un string vacío."
+      },
+      fields: [
+        ["invoice_id", "INV-2026-03-12-007", ""],
+        ["cost_center_id", "3", ""],
+        ["issue_date", "2026-03-12", ""],
+        ["expense_category", "NULL", "null"],
+        ["description", "local delivery, office supplies", ""],
+        ["amount", "1842.55", ""],
+        ["currency", "EUR", ""],
+        ["loaded_at", "2026-03-12 06:04:11", "new"],
+        ["batch_id", "9f3c…a71e", "new"]
+      ],
+      decisionTitle: { en: "Why raw has no primary key", es: "Por qué raw no tiene primary key" },
+      decisionBody: {
+        en: "A primary key on invoice_id would make Postgres reject the entire COPY the moment a duplicate arrives, losing every valid row in the same file and leaving no trace that bad data was ever sent. The raw layer accepts what the source said, exactly as it said it. Duplicates are resolved in dbt, where the resolution is visible, versioned and tested.",
+        es: "Una primary key en invoice_id haría que Postgres rechace el COPY entero apenas llega un duplicado, perdiendo todas las filas válidas del mismo archivo y sin dejar rastro de que el origen mandó datos malos. La capa raw acepta lo que dijo el sistema fuente, tal como lo dijo. Los duplicados se resuelven en dbt, donde la resolución queda a la vista, versionada y testeada."
+      }
+    },
+    {
+      n: "03",
+      tone: "source",
+      tab: { en: "dbt staging", es: "dbt staging" },
+      layer: { en: "dbt · staging · view", es: "dbt · staging · vista" },
+      title: { en: "One version of each invoice", es: "Una sola versión de cada factura" },
+      where: "analytics/models/staging/stg_invoices.sql",
+      summary: {
+        en: "One model per source table, doing the least possible: rename, cast, deduplicate. A row_number partitioned by invoice_id and ordered by updated_at keeps the most recent version of each one, with the batch id as a tie breaker so the result is the same on every run.",
+        es: "Un modelo por tabla de origen, haciendo lo mínimo: renombrar, castear, deduplicar. Un row_number particionado por invoice_id y ordenado por updated_at se queda con la versión más reciente de cada una, con el batch id como criterio de desempate para que el resultado sea el mismo en cada corrida."
+      },
+      facts: [
+        [{ en: "Rows in", es: "Filas que entran" }, "6,753"],
+        [{ en: "Rows out", es: "Filas que salen" }, "6,550"],
+        [{ en: "Duplicates resolved", es: "Duplicados resueltos" }, "203"],
+        [{ en: "Models in this layer", es: "Modelos en esta capa" }, "5"],
+        [{ en: "Materialized as", es: "Materializado como" }, { en: "view", es: "vista" }]
+      ],
+      rows: { en: "6,550 rows, one per invoice", es: "6,550 filas, una por factura" },
+      note: {
+        en: "The column is renamed to expense_category_raw. The name now says that this is what the source reported, and nothing else.",
+        es: "La columna se renombra a expense_category_raw. El nombre ahora dice que esto es lo que reportó el origen, y nada más."
+      },
+      fields: [
+        ["invoice_id", "INV-2026-03-12-007", ""],
+        ["cost_center_id", "3", ""],
+        ["issue_date", "2026-03-12", ""],
+        ["due_date", "2026-04-11", ""],
+        ["expense_category_raw", "NULL", "null"],
+        ["description", "local delivery, office supplies", ""],
+        ["amount", "1842.55", ""],
+        ["currency", "EUR", ""]
+      ],
+      decisionTitle: { en: "Why the day survives here", es: "Por qué el día sobrevive acá" },
+      decisionBody: {
+        en: "The budget is monthly, so truncating issue_date to the first of the month in staging looks harmless and saves a step later. It would be a mistake. The exchange rate conversion two models downstream needs the exact day. Staging renames, casts and deduplicates; it never lowers granularity, because granularity thrown away cannot be recovered.",
+        es: "El presupuesto es mensual, así que truncar issue_date al primero del mes en staging parece inofensivo y ahorra un paso después. Sería un error. La conversión de moneda, dos modelos más abajo, necesita el día exacto. Staging renombra, castea y deduplica. Nunca baja la granularidad, porque una granularidad que se tira no se recupera."
+      }
+    },
+    {
+      n: "04",
+      tone: "source",
+      tab: { en: "Exchange rates", es: "Cotizaciones" },
+      layer: { en: "Parallel branch · API + dbt", es: "Rama paralela · API + dbt" },
+      title: { en: "A rate for every calendar day", es: "Una cotización para cada día del calendario" },
+      where: "ingestion/fetch_fx_rates.py → int_fx_rates_daily",
+      summary: {
+        en: "This branch runs independently of the invoices and meets them at the fact table. Daily USD rates for EUR and ARS come from the Frankfurter API. Markets close, so a date spine generates every calendar day and the last known rate is carried forward across weekends and holidays.",
+        es: "Esta rama corre independiente de las facturas y se encuentra con ellas en la tabla de hechos. Las cotizaciones diarias contra el dólar para EUR y ARS vienen de la API de Frankfurter. Los mercados cierran, así que una serie de fechas genera todos los días del calendario y la última cotización conocida se arrastra sobre fines de semana y feriados."
+      },
+      facts: [
+        [{ en: "Rates returned by the API", es: "Cotizaciones que devuelve la API" }, "676"],
+        [{ en: "Daily rows after the spine", es: "Filas diarias tras la serie" }, "1,095"],
+        [{ en: "Rows forward filled", es: "Filas rellenadas" }, "54"],
+        [{ en: "Longest gap filled", es: "Hueco más largo" }, { en: "2 days", es: "2 días" }],
+        [{ en: "Currencies", es: "Monedas" }, "USD, EUR, ARS"]
+      ],
+      rows: { en: "1,095 daily rates, no gaps", es: "1,095 cotizaciones diarias, sin huecos" },
+      note: {
+        en: "The rate this invoice will be converted with. March 12 is a Thursday, so the rate is a real quote rather than a filled one.",
+        es: "La cotización con la que se va a convertir esta factura. El 12 de marzo es jueves, así que es una cotización real y no una rellenada."
+      },
+      fields: [
+        ["rate_date", "2026-03-12", "new"],
+        ["currency", "EUR", "new"],
+        ["rate_to_usd", "1.1612", "new"],
+        ["is_rate_filled", "false", "new"],
+        ["days_since_last_rate", "0", "new"]
+      ],
+      decisionTitle: { en: "Why a missing rate is not an error", es: "Por qué una cotización faltante no es un error" },
+      decisionBody: {
+        en: "There is no quote on a Saturday, and that is not a data quality problem. The model carries the previous rate forward and records both that it did so and how stale the rate was, so any conversion made with a carried rate can be found later. Filling a gap silently and filling it on the record are very different things.",
+        es: "Un sábado no hay cotización, y eso no es un problema de calidad de datos. El modelo arrastra la cotización anterior y registra que lo hizo y cuán vieja era, así cualquier conversión hecha con una cotización arrastrada se puede encontrar después. Rellenar un hueco en silencio y rellenarlo dejándolo asentado son dos cosas muy distintas."
+      }
+    },
+    {
+      n: "05",
+      tone: "source",
+      tab: { en: "dbt intermediate", es: "dbt intermediate" },
+      layer: { en: "dbt · intermediate · view", es: "dbt · intermediate · vista" },
+      title: { en: "Business rules, before the report", es: "Reglas de negocio, antes del reporte" },
+      where: "analytics/models/intermediate/int_invoices_classified.sql",
+      summary: {
+        en: "The transformations that belong to no single source. Negative amounts are labelled credit notes. Cost center ids missing from the dimension map to an unknown member with key -1 rather than being dropped. And the reported category is coalesced with the model prediction into one column, beside a category_source that records which of the two won.",
+        es: "Las transformaciones que no pertenecen a ningún origen en particular. Los montos negativos quedan marcados como notas de crédito. Los centros de costo que no existen en la dimensión se mapean a un miembro desconocido con clave -1 en vez de descartarse. Y la categoría reportada se combina con la predicción del modelo en una sola columna, al lado de un category_source que registra cuál de las dos ganó."
+      },
+      facts: [
+        [{ en: "Rows", es: "Filas" }, "6,550"],
+        [{ en: "Credit notes", es: "Notas de crédito" }, "139"],
+        [{ en: "Unmapped cost centers", es: "Centros de costo sin mapear" }, "60"],
+        [{ en: "No reported category", es: "Sin categoría reportada" }, "1,002"],
+        [{ en: "Reported", es: "Reportadas" }, "5,548"]
+      ],
+      rows: { en: "6,550 rows, 1,002 waiting on the agent", es: "6,550 filas, 1,002 esperando al agente" },
+      note: {
+        en: "Two new columns. The resolved category is still null here: at this point in the run the agent has not produced a prediction for this invoice.",
+        es: "Dos columnas nuevas. La categoría resuelta todavía es nula. En este punto de la corrida el agente no produjo una predicción para esta factura."
+      },
+      fields: [
+        ["invoice_id", "INV-2026-03-12-007", ""],
+        ["expense_category_raw", "NULL", "null"],
+        ["expense_category", "NULL", "null"],
+        ["category_source", "unknown", "new"],
+        ["transaction_type", "invoice", "new"],
+        ["cost_center_key", "3", "new"],
+        ["amount", "1842.55", ""],
+        ["currency", "EUR", ""]
+      ],
+      decisionTitle: { en: "Why reported always beats predicted", es: "Por qué lo reportado siempre le gana a lo predicho" },
+      decisionBody: {
+        en: "The case expression checks the reported category first and stops there, so a human entry can never be overwritten by a model guess. Reverse the two branches and the model quietly wins every tie, with nothing in the data to show it happened. The order of a case expression is a policy decision, not a formatting one.",
+        es: "El case evalúa primero la categoría reportada y corta ahí, así que una carga humana no puede ser pisada por una predicción del modelo. Si se invierten las dos ramas, el modelo gana todos los empates en silencio, y los datos no muestran que eso pasó. El orden de un case es una decisión de política, no de formato."
+      }
+    },
+    {
+      n: "06",
+      tone: "model",
+      tab: { en: "Classification agent", es: "Agente de clasificación" },
+      layer: { en: "Python · between two dbt runs", es: "Python · entre dos corridas de dbt" },
+      title: { en: "The step dbt cannot do", es: "El paso que dbt no puede hacer" },
+      where: "agent/classify_invoices.py → ml.invoice_category_predictions",
+      summary: {
+        en: "dbt cannot call an API, so the agent sits in the middle of the DAG as a Python task. It selects the invoices staging left without a category, sends each free text description to the model with a schema it is required to answer in, and writes one row per prediction with the model name, the prompt version, the confidence and the timestamp.",
+        es: "dbt no puede llamar a una API, así que el agente va en el medio del DAG como una task de Python. Toma las facturas que staging dejó sin categoría, manda cada descripción en texto libre al modelo con un esquema en el que está obligado a responder, y escribe una fila por predicción con el nombre del modelo, la versión del prompt, la confianza y el timestamp."
+      },
+      facts: [
+        [{ en: "Invoices classified", es: "Facturas clasificadas" }, "1,002"],
+        [{ en: "Correct", es: "Correctas" }, "952"],
+        [{ en: "Accuracy", es: "Precisión" }, "95.01%"],
+        [{ en: "Avg confidence when wrong", es: "Confianza media al errar" }, "0.89"],
+        [{ en: "Rows written", es: "Filas escritas" }, { en: "one per prediction", es: "una por predicción" }]
+      ],
+      rows: { en: "1,002 predictions stored", es: "1,002 predicciones guardadas" },
+      note: {
+        en: "The model read “office supplies” and answered accordingly. The true category is Shipping & Logistics: the expense is the delivery, not the goods.",
+        es: "El modelo leyó “office supplies” y contestó en consecuencia. La categoría real es Shipping & Logistics. El gasto es el envío, no los insumos."
+      },
+      fields: [
+        ["invoice_id", "INV-2026-03-12-007", ""],
+        ["predicted_category", "Office & Supplies", "model"],
+        ["confidence", "0.91", "model"],
+        ["model_name", "openai/gpt-oss-20b", "new"],
+        ["prompt_version", "v1", "new"],
+        ["predicted_at", "2026-03-12 06:09:52", "new"]
+      ],
+      decisionTitle: { en: "Why every prediction is a new row", es: "Por qué cada predicción es una fila nueva" },
+      decisionBody: {
+        en: "Predictions are appended, never updated. Keeping the history is what makes it possible to compare a second prompt against the first instead of overwriting the evidence. It also makes the run resumable: the agent skips invoices that already have a prediction for the current prompt version, which is why hitting a daily token limit halfway through, at 488 of 962 invoices, cost nothing but a restart.",
+        es: "Las predicciones se agregan, nunca se actualizan. Guardar el historial es lo que permite comparar un segundo prompt contra el primero en vez de pisar la evidencia. También hace que la corrida sea retomable. El agente saltea las facturas que ya tienen predicción para la versión de prompt actual, y por eso agotar el límite diario de tokens a mitad de camino, en 488 de 962 facturas, no costó más que volver a arrancarlo."
+      }
+    },
+    {
+      n: "07",
+      tone: "model",
+      tab: { en: "Marts and report", es: "Marts y reporte" },
+      layer: { en: "dbt · marts · table", es: "dbt · marts · tabla" },
+      title: { en: "Budget against actual", es: "Presupuesto contra real" },
+      where: "analytics/models/marts/fct_budget_variance.sql",
+      summary: {
+        en: "Amounts convert to USD at the rate of their own issue date. The variance mart aggregates to cost center, expense category and month, joined to the budget with a full outer join so that budget with no spend and spend with no budget both survive. A singular test asserts the mart totals still match the invoice fact table to the cent.",
+        es: "Los montos se convierten a dólares con la cotización de su propia fecha de emisión. El mart de desvío agrupa por centro de costo, categoría y mes, unido al presupuesto con un full outer join para que sobrevivan tanto el presupuesto sin gasto como el gasto sin presupuesto. Un test singular verifica que los totales del mart sigan coincidiendo con la tabla de hechos de facturas, al centavo."
+      },
+      facts: [
+        [{ en: "Invoice fact rows", es: "Filas en la tabla de hechos" }, "6,550"],
+        [{ en: "Variance rows", es: "Filas del mart de desvío" }, "711"],
+        [{ en: "Net spend", es: "Gasto neto" }, "$60,962,023"],
+        [{ en: "Uncategorized spend", es: "Gasto sin categoría" }, "0.00%"],
+        [{ en: "Categorized by the model", es: "Categorizado por el modelo" }, "15.40%"],
+        [{ en: "Tests", es: "Tests" }, { en: "60 pass, 2 warn", es: "60 pasan, 2 advierten" }]
+      ],
+      rows: {
+        en: "711 rows: cost center, category, month",
+        es: "711 filas: centro de costo, categoría, mes"
+      },
+      note: {
+        en: "The invoice lands in the wrong bucket. It is still traceable: category_source says a model put it there, and the mart reports how much of each row's spend came from predictions.",
+        es: "La factura cae en el bucket equivocado. Igual queda trazable. category_source dice que la puso un modelo, y el mart reporta cuánto del gasto de cada fila viene de predicciones."
+      },
+      fields: [
+        ["invoice_id", "INV-2026-03-12-007", ""],
+        ["budget_month", "2026-03-01", "new"],
+        ["expense_category", "Office & Supplies", "model"],
+        ["category_source", "predicted", "model"],
+        ["rate_to_usd", "1.1612", "new"],
+        ["amount_usd", "2139.57", "new"],
+        ["amount", "1842.55", ""],
+        ["currency", "EUR", ""]
+      ],
+      decisionTitle: { en: "Why the report ships even when the agent fails", es: "Por qué el reporte sale aunque el agente falle" },
+      decisionBody: {
+        en: "The Airflow task that rebuilds the marts carries trigger_rule all_done, and the join that brings predictions in is a left join. The agent enriches the data; it is not the backbone. A token limit or an API outage leaves invoices uncategorized and visibly so, rather than holding back a report whose amounts, currency conversion and budget were all fine. The DAG still turns red, so the failure reaches the person who maintains it and not the person reading the numbers.",
+        es: "La task de Airflow que reconstruye las marts lleva trigger_rule all_done, y el join que trae las predicciones es un left join. El agente enriquece los datos, no es la columna vertebral. Un límite de tokens o una caída de la API dejan facturas sin categorizar y a la vista, en vez de frenar un reporte cuyos montos, conversión de moneda y presupuesto estaban perfectos. El DAG igual se pone en rojo, así que la falla le llega a quien lo mantiene y no a quien lee los números."
+      }
+    }
+  ];
+
+  var lang = "en";
+  var current = 0;
+
+  var wrap = document.getElementById("wrap");
+  var rail = document.getElementById("rail");
+  var narrative = document.getElementById("narrative");
+  var record = document.getElementById("record");
+  var decision = document.getElementById("decision");
+  var prevBtn = document.getElementById("prev");
+  var nextBtn = document.getElementById("next");
+  var progress = document.getElementById("progress");
+  var enBtn = document.getElementById("lang-en");
+  var esBtn = document.getElementById("lang-es");
+
+  function t(v) { return typeof v === "string" ? v : v[lang]; }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function buildRail() {
+    rail.innerHTML = "";
+    STAGES.forEach(function (stage, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "stage-btn";
+      b.setAttribute("role", "tab");
+      b.setAttribute("data-tone", stage.tone);
+      b.id = "tab-" + i;
+      b.innerHTML =
+        '<span class="n">' + stage.n + '</span>' +
+        '<span class="t">' + esc(t(stage.tab)) + '</span>' +
+        '<span class="bar"></span>';
+      b.addEventListener("click", function () { select(i); });
+      rail.appendChild(b);
+    });
+  }
+
+  function renderChrome() {
+    document.getElementById("eyebrow").textContent = t(UI.eyebrow);
+    document.getElementById("standfirst").textContent = t(UI.standfirst);
+    document.getElementById("figures").innerHTML = UI.figures.map(function (f) {
+      return '<div class="figure"><b>' + esc(f[0]) + '</b><span>' + esc(t(f[1])) + '</span></div>';
+    }).join("");
+    document.getElementById("following").innerHTML = t(UI.following);
+    prevBtn.textContent = t(UI.prev);
+    nextBtn.textContent = t(UI.next);
+    enBtn.setAttribute("aria-pressed", lang === "en" ? "true" : "false");
+    esBtn.setAttribute("aria-pressed", lang === "es" ? "true" : "false");
+    wrap.lang = lang;
+  }
+
+  function select(i) {
+    current = i;
+    var s = STAGES[i];
+
+    Array.prototype.forEach.call(rail.children, function (b, j) {
+      b.setAttribute("aria-selected", j === i ? "true" : "false");
+      b.setAttribute("tabindex", j === i ? "0" : "-1");
+    });
+
+    narrative.setAttribute("aria-labelledby", "tab-" + i);
+    narrative.innerHTML =
+      '<span class="layer-tag">' + esc(t(s.layer)) + '</span>' +
+      '<h2>' + esc(t(s.title)) + '</h2>' +
+      '<p class="where">' + esc(s.where) + '</p>' +
+      '<p class="summary">' + esc(t(s.summary)) + '</p>' +
+      '<ul class="facts">' + s.facts.map(function (f) {
+        return '<li><span class="k">' + esc(t(f[0])) + '</span><span class="v">' + esc(t(f[1])) + '</span></li>';
+      }).join("") + '</ul>';
+
+    record.setAttribute("aria-label", t(UI.recordTitle));
+    record.innerHTML =
+      '<div class="record-head">' +
+        '<span class="record-title">' + esc(t(UI.recordTitle)) + '</span>' +
+        '<span class="rowcount">' + esc(t(s.rows)) + '</span>' +
+      '</div>' +
+      '<p class="record-note">' + esc(t(s.note)) + '</p>' +
+      '<div class="fields">' + s.fields.map(function (f) {
+        return '<div class="field" data-state="' + f[2] + '">' +
+          '<span class="f">' + esc(f[0]) + '</span>' +
+          '<span class="v">' + esc(t(f[1])) + '</span></div>';
+      }).join("") + '</div>';
+
+    decision.setAttribute("data-tone", s.tone);
+    decision.innerHTML =
+      '<h3>' + esc(t(UI.decisionLabel)) + '</h3>' +
+      '<p class="decision-title">' + esc(t(s.decisionTitle)) + '</p>' +
+      '<p>' + esc(t(s.decisionBody)) + '</p>';
+
+    prevBtn.disabled = i === 0;
+    nextBtn.disabled = i === STAGES.length - 1;
+    progress.textContent = t(UI.stageOf)
+      .replace("%1", String(i + 1))
+      .replace("%2", String(STAGES.length));
+  }
+
+  function setLang(next) {
+    lang = next;
+    try { localStorage.setItem("bvp-lang", next); } catch (e) {}
+    renderChrome();
+    buildRail();
+    select(current);
+  }
+
+  enBtn.addEventListener("click", function () { setLang("en"); });
+  esBtn.addEventListener("click", function () { setLang("es"); });
+
+  prevBtn.addEventListener("click", function () { if (current > 0) select(current - 1); });
+  nextBtn.addEventListener("click", function () { if (current < STAGES.length - 1) select(current + 1); });
+
+  rail.addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    var next = e.key === "ArrowRight"
+      ? Math.min(current + 1, STAGES.length - 1)
+      : Math.max(current - 1, 0);
+    select(next);
+    rail.children[next].focus();
+  });
+
+  try {
+    var saved = localStorage.getItem("bvp-lang");
+    if (saved === "en" || saved === "es") lang = saved;
+  } catch (e) {}
+
+  renderChrome();
+  buildRail();
+  select(0);
+</script>
+
+</body>
+</html>

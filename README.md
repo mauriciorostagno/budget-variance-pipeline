@@ -10,6 +10,9 @@ measured against a labelled set of 6550 invoices.
 
 ![Airflow DAG](docs/airflow_dag.png)
 
+**[Interactive walkthrough](https://claude.ai/artifact/QDHEow5LQJtBXDDVBJWmfF)** — step through the seven stages and follow a single invoice all the way from the
+ERP export to the variance report. Source in `docs/pipeline.html`.
+
 ## Results
 
 "- 6550 invoices over 12 months, 61M USD of net spend, in USD, EUR and ARS"
