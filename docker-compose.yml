@@ -24,6 +24,34 @@ services:
     ports:
       - "5050:80"
 
+  airflow:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Airflow's own metadata. Same server as the warehouse, separate database.
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://data_admin:admin@postgres:5432/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/dags
+      # Kept on the mounted project so the generated admin password survives
+      # a container rebuild instead of being regenerated every time.
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/project/.airflow/passwords.json
+      # The warehouse, as seen from inside the compose network.
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: finance_datawarehouse
+      PGUSER: data_admin
+      PGPASSWORD: admin
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      DBT_PROFILES_DIR: /opt/airflow/project/analytics
+    volumes:
+      - .:/opt/airflow/project
+    ports:
+      - "8080:8080"
+    command: bash -c "airflow standalone"
+
 volumes:
   postgres-db-volume:
   pgadmin-db-volume:

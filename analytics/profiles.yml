@@ -1,0 +1,14 @@
+analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      # Defaults are the local setup. Airflow overrides them with the
+      # hostname and port the warehouse has inside the compose network.
+      host: "{{ env_var('PGHOST', '127.0.0.1') }}"
+      port: "{{ env_var('PGPORT', '5433') | int }}"
+      user: "{{ env_var('PGUSER', 'data_admin') }}"
+      password: "{{ env_var('PGPASSWORD', 'admin') }}"
+      dbname: "{{ env_var('PGDATABASE', 'finance_datawarehouse') }}"
+      schema: analytics
+      threads: 4
