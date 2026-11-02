@@ -2,4 +2,6 @@
 target/
 dbt_packages/
 logs/
+analytics/.user.yml
+ground_truth/
 .env

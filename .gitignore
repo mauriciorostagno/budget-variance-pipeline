@@ -2,4 +2,8 @@
 .env
 __pycache__/
 landing/
-analytics/profiles.yml
+# Airflow local admin password, generated at first start.
+.airflow/
+logs/
+analytics/.user.yml
+ground_truth/

@@ -5,6 +5,11 @@ from faker import Faker
 
 fake = Faker()
 
+# Fixed so the generated dataset is identical on every run and machine.
+# Faker keeps its own generator, so seeding random alone is not enough.
+random.seed(42)
+Faker.seed(42)
+
 VENDOR_TYPES = ["software", "consulting", "logistics", "services", "sales"]
 COST_CENTERS = [
     (1, "Marketing", "Commercial", "Laura Mendez"),

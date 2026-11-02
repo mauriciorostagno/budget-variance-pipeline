@@ -2,6 +2,9 @@ from datetime import date
 import csv
 import random
 
+# Fixed so the generated dataset is identical on every run and machine.
+random.seed(42)
+
 from export_invoices import EXPENSE_DESCRIPTIONS
 
 COST_CENTER_IDS = [1, 2, 3, 4, 5, 6, 7]

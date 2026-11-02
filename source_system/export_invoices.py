@@ -2,6 +2,9 @@ from datetime import date, datetime, time, timedelta
 import csv
 import random
 
+# Fixed so the generated dataset is identical on every run and machine.
+random.seed(42)
+
 CURRENCIES = ["USD", "ARS", "EUR"]
 AMOUNT_RANGES = {
     "USD": (100, 20000),
