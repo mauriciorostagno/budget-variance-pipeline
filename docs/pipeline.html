@@ -158,14 +158,21 @@
     color: var(--muted);
   }
 
-  /* ---- stage rail ---- */
+  /* ---- flow diagram ---- */
 
-  .rail-scroll { overflow-x: auto; margin: 0 -4px 26px; padding: 4px; }
+  .rail-scroll { overflow-x: auto; margin: 0 -4px 26px; padding: 6px 4px 8px; }
 
-  .rail { display: flex; align-items: stretch; gap: 0; min-width: 780px; }
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(110px, 1fr));
+    column-gap: 30px;
+    row-gap: 36px;
+    align-items: stretch;
+    min-width: 870px;
+  }
 
   .stage-btn {
-    flex: 1 1 0;
+    position: relative;
     min-width: 0;
     appearance: none;
     cursor: pointer;
@@ -174,17 +181,15 @@
     background: var(--surface);
     color: var(--muted);
     border: 1px solid var(--line);
-    border-right-width: 0;
-    padding: 10px 12px 12px;
+    border-radius: 3px;
+    padding: 9px 11px 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    transition: background .15s ease, color .15s ease;
+    gap: 3px;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
   }
-  .stage-btn:first-child { border-radius: 3px 0 0 3px; }
-  .stage-btn:last-child { border-right-width: 1px; border-radius: 0 3px 3px 0; }
   .stage-btn:hover { background: var(--surface-2); color: var(--ink); }
-  .stage-btn:focus-visible { outline: 2px solid var(--source); outline-offset: -2px; z-index: 2; }
+  .stage-btn:focus-visible { outline: 2px solid var(--source); outline-offset: 2px; z-index: 3; }
 
   .stage-btn .n {
     font-family: var(--mono);
@@ -193,13 +198,65 @@
     color: var(--muted);
   }
   .stage-btn .t { font-size: 13px; font-weight: 600; line-height: 1.25; }
+  .stage-btn .k {
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 9px;
+  }
 
   .stage-btn[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-  .stage-btn[aria-selected="true"] .n { color: var(--bg); opacity: .65; }
+  .stage-btn[aria-selected="true"] .n,
+  .stage-btn[aria-selected="true"] .k { color: var(--bg); opacity: .7; }
 
-  .stage-btn .bar { height: 3px; width: 100%; background: var(--line-strong); margin-top: 2px; }
+  .stage-btn .bar { height: 3px; width: calc(100% + 22px); margin: auto -11px 0; background: var(--line-strong); }
   .stage-btn[data-tone="source"] .bar { background: var(--source); }
   .stage-btn[data-tone="model"] .bar { background: var(--model); }
+
+  /* connectors along the main path */
+  .stage-btn.has-next::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    width: 30px;
+    height: 1px;
+    background: var(--line-strong);
+  }
+  .stage-btn.has-next .tip {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 21px);
+    width: 6px;
+    height: 6px;
+    border-top: 1px solid var(--line-strong);
+    border-right: 1px solid var(--line-strong);
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  /* the parallel branch, joining the fact table from below */
+  .stage-btn.fx { grid-column: 6; grid-row: 2; }
+  .stage-btn.fx::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    width: 0;
+    height: 36px;
+    border-left: 1px dashed var(--line-strong);
+  }
+  .stage-btn.fx .tip {
+    position: absolute;
+    bottom: calc(100% + 30px);
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    border-top: 1px solid var(--line-strong);
+    border-right: 1px solid var(--line-strong);
+    transform: translateX(-50%) rotate(-45deg);
+  }
 
   /* ---- detail ---- */
 
@@ -207,7 +264,7 @@
 
   @media (max-width: 760px) {
     .detail { grid-template-columns: 1fr; }
-    .rail { min-width: 700px; }
+    .flow { min-width: 800px; }
   }
 
   .panel {
@@ -372,7 +429,7 @@
   </header>
 
   <div class="rail-scroll">
-    <div class="rail" role="tablist" aria-label="Pipeline stages" id="rail"></div>
+    <div class="flow" role="tablist" aria-label="Pipeline stages" id="rail"></div>
   </div>
 
   <main class="detail">
@@ -723,21 +780,39 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // What kind of thing runs at each stage. The point of the row is that two
+  // dbt steps sit either side of a Python one: dbt cannot call an API.
+  var KIND = ["ERP", "Python", "dbt", "API + dbt", "dbt", "Python + LLM", "dbt"];
+
+  // The exchange rate branch runs in parallel, so it is drawn below the main
+  // path, joining at the fact table rather than sitting in the sequence.
+  var MAIN_ORDER = [0, 1, 2, 4, 5, 6];
+  var FX_INDEX = 3;
+  var btns = [];
+
   function buildRail() {
     rail.innerHTML = "";
-    STAGES.forEach(function (stage, i) {
+    btns = [];
+    MAIN_ORDER.concat([FX_INDEX]).forEach(function (i, pos) {
+      var stage = STAGES[i];
+      var isFx = i === FX_INDEX;
+      var hasNext = !isFx && pos < MAIN_ORDER.length - 1;
+
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "stage-btn";
+      b.className = "stage-btn" + (isFx ? " fx" : "") + (hasNext ? " has-next" : "");
       b.setAttribute("role", "tab");
       b.setAttribute("data-tone", stage.tone);
       b.id = "tab-" + i;
       b.innerHTML =
         '<span class="n">' + stage.n + '</span>' +
         '<span class="t">' + esc(t(stage.tab)) + '</span>' +
-        '<span class="bar"></span>';
+        '<span class="k">' + esc(KIND[i]) + '</span>' +
+        '<span class="bar"></span>' +
+        (hasNext || isFx ? '<span class="tip" aria-hidden="true"></span>' : '');
       b.addEventListener("click", function () { select(i); });
       rail.appendChild(b);
+      btns[i] = b;
     });
   }
 
@@ -759,7 +834,8 @@
     current = i;
     var s = STAGES[i];
 
-    Array.prototype.forEach.call(rail.children, function (b, j) {
+    btns.forEach(function (b, j) {
+      if (!b) return;
       b.setAttribute("aria-selected", j === i ? "true" : "false");
       b.setAttribute("tabindex", j === i ? "0" : "-1");
     });
@@ -821,7 +897,7 @@
       ? Math.min(current + 1, STAGES.length - 1)
       : Math.max(current - 1, 0);
     select(next);
-    rail.children[next].focus();
+    if (btns[next]) btns[next].focus();
   });
 
   try {
